@@ -46,6 +46,7 @@ Dialog.addRadioButtonGroup("Calibration image type",newArray("16-bit","32-bit"),
 Dialog.addRadioButtonGroup("Target image type",newArray("16-bit","32-bit"),1,2,"32-bit");
 Dialog.addNumber("Calibration curve exposure time (ms)",100);
 Dialog.addNumber("Target exposure time (ms)",1000);
+Dialog.addRadioButtonGroup("Use batch mode?",newArray("Yes","No"),1,2,"Yes");
 Dialog.show();
 correctNoiseUneven = Dialog.getCheckbox;
 //useExternalBackground = Dialog.getCheckbox; //has to be left in to optimize code
@@ -62,6 +63,7 @@ calibrationImageType = Dialog.getRadioButton;
 targetImageType = Dialog.getRadioButton;
 calibrationExposureTimeMs = Dialog.getNumber;
 targetExposureTimeMs = Dialog.getNumber;
+useBatchMode = Dialog.getRadioButton;
 
 bitConversionConstant = 6.554; // 214,747.3647/32,767: the ratio between 32 bit max and 16 bit max
 
@@ -103,6 +105,7 @@ for(i=0;i<allFolders.length;i++) {
 			allFilesInFolder = getFileList(folderPath);
 			for(j=0;j<allFilesInFolder.length;j++) {
 				if(endsWith(allFilesInFolder[j],".tif")) {
+					print(allFilesInFolder[j]);
 					fullFilePath = folderPath + allFilesInFolder[j];
 					allImagePaths = Array.concat(allImagePaths,fullFilePath);
 				}
@@ -116,16 +119,18 @@ for(i=0;i<allFolders.length;i++) {
 		else if(allFolders[i]=="CameraNoise.tif") {
 			backgroundPath = folderPath;
 		}
-		else { //it's not a folder, it's an image
+		else if(endsWith(allFolders[i],".tif") && allFolders[i] != "CalibrationCurveFinal.tif") {//it's not a folder, it's an image
 			fullFilePath = folderPath;
 			allImagePaths = Array.concat(allImagePaths,fullFilePath);
 		}
 	}
 }
-
 // Separating image stacks into the three channels, correcting uneven illumination and noise, etc.
 
 if(correctNoiseUneven) {
+	if(useBatchMode=="Yes") {
+		setBatchMode(true);
+	}
 	print("Correcting noise and uneven illumination...");
 	if(unevenPath == "NA") { //Creates uneven illumination image
 		Dialog.create("Attention");
@@ -225,11 +230,9 @@ if(correctNoiseUneven) {
 
 			//Creating background image if it's missing
 			if(backgroundPath=="NA") { 
-				if(operatingSystem == "Mac") {
-					Dialog.create("Attention");
-					Dialog.addMessage("Press OK and then select camera noise image");
-					Dialog.show;
-				}
+				Dialog.create("Attention");
+				Dialog.addMessage("Press OK and then select camera noise image");
+				Dialog.show;
 				rawBackgroundPath=File.openDialog("Select camera noise image");
 				open(rawBackgroundPath);
 				backgroundID = getImageID;
@@ -278,6 +281,7 @@ if(correctNoiseUneven) {
 
 //Performing image segmentations and saving them on the calibration curve file
 if(segmentImages) {
+	setBatchMode(false);
 	print("Segmenting images...");
 	curveFiles = getFileList(CurveDir); //note that I will rely on the MAARS files having the same name
 	run("Close All");
@@ -323,7 +327,7 @@ if(segmentImages) {
 				wait(250); //checks every 0.25 seconds to see if the user has completed segmentation
 			}
 			run("Close All");
-			open(curvePath);	
+			open(curvePath);
 			run("From ROI Manager");
 			saveAs("Tiff",curvePath);
 			run("Close All");
@@ -346,7 +350,9 @@ if(segmentImages) {
 
 //Finding and plotting brightnesses
 if(plotCurve) {
-
+	if(useBatchMode=="Yes") {
+		setBatchMode(true);
+	}
 	//Clearing results window
 	run("Clear Results");
 	
@@ -512,6 +518,7 @@ if(plotCurve) {
 	}
 	
 	//Plotting the curve
+	setBatchMode(false);
 	xArray = newArray();
 	yArray = newArray();
 	errorBars = newArray();
@@ -556,7 +563,9 @@ if(plotCurve) {
 
 //Finding total fluorescence in extra images
 if(extraImages) {
-	
+	if(useBatchMode=="Yes") {
+		setBatchMode(true);
+	}
 	//Clearing results window to clear any existing results
 	run("Clear Results");
 	resultRowNumber = 0;
@@ -744,8 +753,6 @@ if(extraImages) {
 		else {
 			print(possibleStrains[strain] + " number of molecules per cell: " + strainNumMolecules + " +/- " + strainNumMoleculesStDev);
 		}
-
-	
 
 		//Creating and saving results table (Thanks Matt!)
 		setResult("Strain/Movie", resultRowNumber, possibleStrains[strain] + " compiled");
